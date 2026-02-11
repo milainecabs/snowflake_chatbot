@@ -1,0 +1,23 @@
+# Chatbot Snowflake Cortex
+
+Application Streamlit utilisant Snowflake Cortex pour générer des réponses IA.
+
+## Installation
+
+pip install -r requirements.txt
+
+## Lancement
+
+streamlit run streamlit_app.py
+
+## Configuration
+
+Créer un fichier `.env` contenant :
+
+SNOWFLAKE_ACCOUNT=...
+SNOWFLAKE_USER=...
+SNOWFLAKE_PASSWORD=...
+SNOWFLAKE_ROLE=...
+SNOWFLAKE_WAREHOUSE=...
+SNOWFLAKE_DATABASE=...
+SNOWFLAKE_SCHEMA=...
