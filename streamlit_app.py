@@ -1,16 +1,13 @@
 import streamlit as st
-from snowflake.snowpark.context import get_active_session
-import uuid
-
-# -------------------------------------------------
-# INIT
-# -------------------------------------------------
-# -------------------------------------------------
-
-
 from snowflake.snowpark import Session
+import uuid
 import os
+import time
 from dotenv import load_dotenv
+
+# -------------------------------------------------
+# SESSION SNOWFLAKE
+# -------------------------------------------------
 
 def create_session():
     load_dotenv()
@@ -28,8 +25,6 @@ def create_session():
     return Session.builder.configs(connection_parameters).create()
 
 session = create_session()
-
-#session = get_active_session()
 
 TABLE_NAME = "DB_LAB.CHAT_APP.CONVERSATIONS"
 
@@ -50,6 +45,9 @@ if "messages" not in st.session_state:
 
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = str(uuid.uuid4())
+
+if "greeted" not in st.session_state:
+    st.session_state.greeted = False
 
 # -------------------------------------------------
 # BDD HELPERS
@@ -88,12 +86,11 @@ def load_conversation(conv_id):
         ORDER BY CREATED_AT
     """).collect()
 
-    messages = []
-    for row in rows:
-        messages.append({"role": row["ROLE"].lower(), "content": row["CONTENT"]})
+    messages = [{"role": row["ROLE"].lower(), "content": row["CONTENT"]} for row in rows]
 
     st.session_state.messages = messages
     st.session_state.conversation_id = conv_id
+    st.session_state.greeted = True
 
 # -------------------------------------------------
 # SIDEBAR
@@ -107,6 +104,7 @@ model_label = st.sidebar.selectbox(
 )
 model = AVAILABLE_MODELS[model_label]
 
+# 👉 Température réintégrée
 temperature = st.sidebar.slider(
     "Température (affichage uniquement)",
     0.0, 1.5, 0.7, step=0.1
@@ -115,6 +113,7 @@ temperature = st.sidebar.slider(
 if st.sidebar.button("🆕 Nouveau chat"):
     st.session_state.messages = []
     st.session_state.conversation_id = str(uuid.uuid4())
+    st.session_state.greeted = False
     st.rerun()
 
 st.sidebar.markdown("---")
@@ -139,13 +138,22 @@ else:
 st.title("🤖 Chatbot Cortex Intelligent")
 st.caption(
     f"Modèle actif : **{model_label}** | "
-    f"Température (UI) : {temperature} | "
+    f"Température : {temperature} | "
     f"Conversation : {st.session_state.conversation_id}"
 )
 
+# -------------------------------------------------
+# MESSAGE D’ACCUEIL
+# -------------------------------------------------
+
+if not st.session_state.greeted:
+    greeting = "Bonjour ! Je suis ton assistant IA. Comment puis‑je t’aider aujourd’hui ?"
+    st.session_state.messages.append({"role": "assistant", "content": greeting})
+    save_message("assistant", greeting)
+    st.session_state.greeted = True
+
+# Affichage des messages
 for msg in st.session_state.messages:
-    if msg["role"] == "system":
-        continue
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
@@ -174,7 +182,7 @@ Réponse :
     return prompt
 
 # -------------------------------------------------
-# CORTEX CALL (2 arguments uniquement)
+# CORTEX CALL
 # -------------------------------------------------
 
 def call_cortex(prompt, model):
@@ -185,8 +193,7 @@ def call_cortex(prompt, model):
     ) AS RESPONSE
     """
     result = session.sql(query).collect()
-    response = result[0]["RESPONSE"]
-    return str(response).strip()
+    return str(result[0]["RESPONSE"]).strip()
 
 # -------------------------------------------------
 # CHAT INPUT
@@ -206,7 +213,15 @@ if user_input:
 
     with st.chat_message("assistant"):
         with st.spinner("Réflexion..."):
+            start = time.time()
+
             response = call_cortex(prompt, model)
+
+            duration = time.time() - start
+
+            if duration > 10:
+                st.markdown("_Désolé pour l’attente, je réfléchissais…_")
+
             st.markdown(response)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
